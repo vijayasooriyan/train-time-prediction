@@ -27,13 +27,18 @@ export class PredictionController {
   /**
    * Get train travel time prediction
    * 
-   * Current: Uses distance and speed (synthetic)
-   * Real-world: Should use train_number and stations
+   * Input: Distance (km) + Number of stops
+   * Output: Predicted journey duration with breakdown
+   * 
+   * Formula: (distance/60 + num_stops*5) * 1.10
+   * - avg_speed: 60 km/h
+   * - dwell_time_per_stop: 5 minutes
+   * - contingency: 10% buffer
    * 
    * Request body example:
    * {
    *   "distance": 78,          // km (required)
-   *   "speed": 60,             // km/h (required)
+   *   "num_stops": 3,          // number (required)
    *   "train_number": 107,     // optional
    *   "source_station": "SWV", // optional
    *   "dest_station": "MAO",   // optional
@@ -42,12 +47,13 @@ export class PredictionController {
    * 
    * Response example:
    * {
-   *   "prediction": 78,                    // expected duration in minutes
-   *   "confidence": 0.75,                  // accuracy confidence (0-1)
-   *   "eta": "11:45",                      // estimated arrival time
-   *   "factors": ["..."],                  // factors affecting journey
-   *   "timestamp": "2024-01-15T10:25:00Z", // when prediction was made
-   *   "input": {...}                       // echo of input for verification
+   *   "prediction": 105,
+   *   "duration_readable": "1h 45m",
+   *   "breakdown": {...},
+   *   "factors": [...],
+   *   "timestamp": "2024-03-22T10:25:00Z",
+   *   "input": {"distance": 78, "num_stops": 3},
+   *   "note": "Calculation formula..."
    * }
    */
   @Post()

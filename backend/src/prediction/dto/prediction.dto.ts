@@ -1,71 +1,81 @@
 /**
  * DTO for Train Time Prediction
  * 
- * Real-world train prediction requires actual identifiers, not synthetic speed values
- * Current implementation uses distance and speed for simplicity, but should evolve to:
- * - train_number: Which train (e.g., 107, 128)
- * - source_station: Departure station code (e.g., "SWV", "MAO")
- * - dest_station: Destination station code (e.g., "PUNE")
- * - departure_time: Departure time (HH:MM format)
+ * Uses Distance and Number of Stops to predict journey duration
+ * Formula: duration = (distance/60 + num_stops*5) * 1.10 minutes
  */
 
 export class PredictionRequest {
   /**
-   * Distance in kilometers (derived from actual train route)
-   * Should be > 0 and < 2000 km
+   * Distance in kilometers between stations
+   * Must be between 1-2000 km
    */
   distance: number;
 
   /**
-   * Average speed in km/h (derived from train type)
-   * Typical values:
-   * - Passenger trains: 40-60 km/h
-   * - Express trains: 80-100 km/h
-   * - Freight: 30-50 km/h
-   * 
-   * TODO: Replace with train_number for real-world use
+   * Total number of stops on the route
+   * Includes both starting station and all intermediate stops
+   * Typical: Local trains 10-30, Express 4-15, High-speed 2-8
    */
-  speed: number;
+  num_stops: number;
 
   /**
-   * Optional: Train number for better predictions
+   * Optional: Train number for reference
+   * e.g., 107, 128 from Dataset
    */
   train_number?: number;
 
   /**
    * Optional: Source station code
+   * e.g., "SWV", "MAO"
    */
   source_station?: string;
 
   /**
    * Optional: Destination station code
+   * e.g., "PUNE", "MIRAJ"
    */
   dest_station?: string;
 
   /**
    * Optional: Departure time (HH:MM format)
+   * For future: time-based delay analysis
    */
   departure_time?: string;
 }
 
 export class PredictionResponse {
   /**
-   * Predicted journey time in minutes
+   * Predicted journey duration in minutes
    */
   prediction: number;
 
   /**
-   * For future enhancement: Confidence level (0-1)
+   * Duration in human-readable format (e.g., "1h 18m")
    */
-  confidence?: number;
+  duration_readable: string;
 
   /**
-   * For future enhancement: Estimated arrival time
+   * Breakdown of time calculation
    */
-  eta?: string;
+  breakdown: {
+    base_travel_time_minutes: number;
+    stops_dwell_time_minutes: number;
+    subtotal_minutes: number;
+    contingency_10_percent_minutes: number;
+    total_predicted_minutes: number;
+  };
 
   /**
-   * For future enhancement: List of delay factors
+   * Input echo for verification
+   */
+  input: {
+    distance: number;
+    num_stops: number;
+  };
+
+  /**
+   * Estimated time factors
    */
   factors?: string[];
 
@@ -75,12 +85,9 @@ export class PredictionResponse {
   timestamp: string;
 
   /**
-   * Input parameters echo for verification
+   * Formula used for calculation
    */
-  input: {
-    distance: number;
-    speed: number;
-  };
+  note: string;
 }
 
 export class PredictionValidationError {

@@ -13,13 +13,13 @@ export class PredictionService {
   private readonly REQUEST_TIMEOUT = 5000; // 5 seconds
 
   /**
-   * IMPORTANT: Current implementation uses distance + speed
-   * Real-world improvements needed:
-   * 1. Accept train_number instead of speed
-   * 2. Use station database to calculate actual distance
-   * 3. Fetch timetable to get dwell times
-   * 4. Factor in time-of-day (peak/off-peak)
-   * 5. Track historical delays for accuracy
+   * UPDATED: Current implementation uses distance + num_stops
+   * Much more realistic than distance + speed!
+   * 
+   * Formula: duration = (distance/60 + num_stops*5) * 1.10
+   * - Avg speed: 60 km/h
+   * - Dwell time: 5 min per stop
+   * - Contingency: 10% buffer
    */
   async getPrediction(data: PredictionRequest): Promise<PredictionResponse> {
     // 1. Validate input
@@ -60,19 +60,19 @@ export class PredictionService {
       });
     }
 
-    // Speed validation
-    if (!data.speed || typeof data.speed !== 'number') {
+    // Number of stops validation
+    if (!data.num_stops || typeof data.num_stops !== 'number') {
       errors.push({
-        field: 'speed',
-        message: 'Speed is required and must be a number (km/h)',
-        received_value: data.speed,
+        field: 'num_stops',
+        message: 'Number of stops is required and must be a number',
+        received_value: data.num_stops,
       });
-    } else if (data.speed < 20 || data.speed > 200) {
-      // 20 km/h = freight, 200 km/h = max high-speed trains
+    } else if (data.num_stops < 1 || data.num_stops > 100) {
+      // Local: 10-30 stops, Express: 4-15, High-speed: 2-8
       errors.push({
-        field: 'speed',
-        message: 'Speed must be between 20 and 200 km/h (realistic train speeds)',
-        received_value: data.speed,
+        field: 'num_stops',
+        message: 'Number of stops must be between 1 and 100 (realistic train routes)',
+        received_value: data.num_stops,
       });
     }
 
@@ -122,14 +122,12 @@ export class PredictionService {
     }
 
     return {
-      prediction: Math.round(modelData.prediction), // Round to nearest minute
-      confidence: 0.75, // Fixed for now, should improve with better model
-      eta: this.calculateETA(modelData.prediction),
+      prediction: Math.round(modelData.prediction),
       factors: this.getDelayFactors(input),
       timestamp: new Date().toISOString(),
       input: {
         distance: input.distance,
-        speed: input.speed,
+        num_stops: input.num_stops,
       },
     };
   }
@@ -150,33 +148,35 @@ export class PredictionService {
 
   /**
    * Identify factors affecting journey time
-   * From dataset analysis, these real-world factors matter:
+   * Based on distance and number of stops
    */
   private getDelayFactors(input: PredictionRequest): string[] {
     const factors: string[] = [];
 
-    // Factor 1: Long distance trains have more stops
+    // Factor 1: Long distance = more stops = longer journey
     if (input.distance > 500) {
-      factors.push('Long distance route - multiple station stops');
+      factors.push('Long distance route - more time at journey');
     }
 
-    // Factor 2: Low speed indicates passenger/local train
-    if (input.speed < 60) {
-      factors.push('Local/passenger train - more frequent stops');
+    // Factor 2: Many stops means more dwell time
+    if (input.num_stops > 15) {
+      factors.push('Many stops - significant stop durations');
+    } else if (input.num_stops < 5) {
+      factors.push('Few stops - express/fast train (quicker journey)');
     }
 
     // Factor 3: Peak hours (7-9 AM, 5-9 PM) - India standard
     const hour = new Date().getHours();
     if ((hour >= 7 && hour <= 9) || (hour >= 17 && hour <= 21)) {
-      factors.push('Peak travel hours - potential delays');
+      factors.push('Peak travel hours - potential delays +10-15 min');
     }
 
-    // Factor 4: Higher speed trains usually express with fewer stops
-    if (input.speed > 100) {
-      factors.push('Express train - limited stops, faster travel');
+    // Factor 4: High distance + many stops = especially long
+    if (input.distance > 300 && input.num_stops > 10) {
+      factors.push('Long journey with multiple stops - plan extra time');
     }
 
-    return factors.length > 0 ? factors : ['No significant delays expected'];
+    return factors.length > 0 ? factors : ['Standard journey, no major delays expected'];
   }
 
   /**

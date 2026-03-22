@@ -47,14 +47,15 @@ class PredictionRequest(BaseModel):
     """
     Train journey time prediction request.
     
-    Real-world fields to add:
-    - train_number: Which specific train (e.g., 107, 128 from Dataset1.csv)
-    - route_id: Route identifier
-    - departure_timestamp: When train departs (not just distance/speed)
+    Uses real-world parameters:
+    - distance: Km between start and end stations
+    - num_stops: Number of stops (stations) on the route
+    
+    Formula: journey_time = (distance / avg_speed) + (num_stops * dwell_time_per_stop)
     """
     
     distance: float = Field(..., gt=0, le=2000, description="Distance in km (1-2000)")
-    speed: float = Field(..., gt=20, lt=200, description="Average speed km/h (20-200)")
+    num_stops: int = Field(..., ge=1, le=100, description="Number of stops (1-100)")
     train_number: Optional[int] = Field(None, description="Optional: Train number (e.g., 107, 128)")
     source_station: Optional[str] = Field(None, description="Optional: Source station code")
     dest_station: Optional[str] = Field(None, description="Optional: Destination station code")
@@ -65,38 +66,33 @@ class PredictionRequest(BaseModel):
         if v <= 0:
             raise ValueError('Distance must be positive')
         if v > 2000:
-            raise ValueError('Distance cannot exceed 2000 km (unrealistic for single train journey)')
+            raise ValueError('Distance cannot exceed 2000 km')
         return v
 
-    @validator('speed')
-    def validate_speed(cls, v):
-        # Realistic train speeds
-        # Local trains: 40-60 km/h
-        # Express trains: 80-120 km/h
-        # High-speed: 200+ km/h (rare in India)
-        if v < 20 or v > 200:
-            raise ValueError('Speed must be between 20-200 km/h')
+    @validator('num_stops')
+    def validate_stops(cls, v):
+        if v < 1:
+            raise ValueError('Number of stops must be at least 1')
+        if v > 100:
+            raise ValueError('Number of stops cannot exceed 100')
         return v
 
 class PredictionResponse(BaseModel):
     """
     Response from prediction model.
     
-    ⚠️ CLARITY ISSUE IN ORIGINAL:
-    What does 'prediction' mean?
-    - Answer: Journey time in MINUTES (distance / speed simplified calculation)
-    
-    Real-world response should include:
-    - ETA (Estimated Time of Arrival)
-    - Confidence level
-    - Delay factors
+    Prediction includes:
+    - prediction: Journey time in MINUTES
+    - duration_readable: Human-readable format (e.g., '1h 18m')
+    - breakdown: How the time is calculated
     """
     
     prediction: float = Field(..., description="Predicted journey time in MINUTES")
     duration_readable: str = Field(..., description="Human-readable duration (e.g., '1h 18m')")
     input_distance: float
-    input_speed: float
-    note: str = Field(..., description="Clarification about what prediction means")
+    input_num_stops: int
+    breakdown: dict = Field(..., description="Time breakdown details")
+    note: str = Field(..., description="Calculation formula used")
 
 @app.get("/", tags=["Health"])
 def health_check():
@@ -111,71 +107,67 @@ def health_check():
 @app.post("/predict", response_model=PredictionResponse, tags=["Prediction"])
 def predict(data: PredictionRequest):
     """
-    Predict train journey time.
+    Predict train journey time using distance and number of stops.
     
-    Current Formula: time (minutes) = distance (km) / (speed (km/h) / 60)
-    
-    Returns:
-    - prediction: Journey duration in MINUTES
-    - Other fields for clarity and future expansion
+    Formula: time = (distance/60 + num_stops*5) * 1.10
+    - Base speed: 60 km/h (average train)
+    - Dwell time: 5 min per stop
+    - Contingency: 10% for delays
     
     Example request:
     {
         "distance": 78,
-        "speed": 60,
-        "train_number": 107
-    }
-    
-    Example response:
-    {
-        "prediction": 78.0,
-        "duration_readable": "1h 18m",
-        "input_distance": 78,
-        "input_speed": 60,
-        "note": "Based on distance and average speed. Real implementation should use actual timetables."
+        "num_stops": 3
     }
     """
     
-    # Check model is loaded
-    if model is None:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "Model not loaded",
-                "message": "ML model could not be loaded. Check if train_model.pkl exists.",
-                "status": 503
-            }
-        )
-    
     try:
-        # Create feature array for model [distance, speed]
-        features = np.array([[data.distance, data.speed]])
+        # Calculation parameters (based on Indian train patterns)
+        AVG_SPEED_KMH = 60
+        DWELL_TIME_PER_STOP = 5
+        CONTINGENCY_FACTOR = 1.10
         
-        # Get prediction from model
-        prediction_minutes = float(model.predict(features)[0])
+        # Base travel time
+        base_travel_minutes = (data.distance / AVG_SPEED_KMH) * 60
+        
+        # Dwell time at stops
+        stops_dwell_minutes = data.num_stops * DWELL_TIME_PER_STOP
+        
+        # Total without contingency
+        total_base = base_travel_minutes + stops_dwell_minutes
+        
+        # Apply contingency
+        prediction_minutes = total_base * CONTINGENCY_FACTOR
         
         # Convert to readable format
         hours = int(prediction_minutes // 60)
         minutes = int(prediction_minutes % 60)
         duration_readable = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
         
-        # Log prediction for monitoring
+        # Breakdown
+        breakdown = {
+            "base_travel_time_minutes": round(base_travel_minutes, 1),
+            "stops_dwell_time_minutes": stops_dwell_minutes,
+            "subtotal_minutes": round(total_base, 1),
+            "contingency_10_percent_minutes": round(total_base * 0.10, 1),
+            "total_predicted_minutes": round(prediction_minutes, 1)
+        }
+        
         logger.info(
-            f"Prediction: {data.distance}km @ {data.speed}km/h = {prediction_minutes:.1f} min"
+            f"Prediction: {data.distance}km + {data.num_stops} stops = {duration_readable}"
         )
         
         return PredictionResponse(
             prediction=prediction_minutes,
             duration_readable=duration_readable,
             input_distance=data.distance,
-            input_speed=data.speed,
-            note="⚠️ This is a basic model using simple distance/speed calculation. "
-                 "Real implementation should incorporate timetables, stop durations, "
-                 "and historical patterns from Dataset1.csv"
+            input_num_stops=data.num_stops,
+            breakdown=breakdown,
+            note=f"({data.distance}km/60kmh) + ({data.num_stops}×5min) × 1.10 = {duration_readable}"
         )
         
     except Exception as e:
-        logger.error(f"✗ Prediction error: {str(e)}")
+        logger.error(f"Prediction error: {str(e)}")
         raise HTTPException(
             status_code=500,
             detail={
