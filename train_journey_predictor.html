@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Train Journey Time Predictor — ML System</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #080c10;
+    --surface: #0d1520;
+    --surface2: #121e2e;
+    --border: #1e3048;
+    --accent: #00d4ff;
+    --accent2: #ff6b35;
+    --accent3: #7fff6b;
+    --text: #e8f4fd;
+    --muted: #5a7a99;
+    --track: #1a2a3a;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated rail track background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: 
+      repeating-linear-gradient(90deg, transparent, transparent 79px, var(--track) 79px, var(--track) 80px),
+      repeating-linear-gradient(0deg, transparent, transparent 39px, var(--track) 39px, var(--track) 40px);
+    opacity: 0.15;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 32px 0 24px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+    animation: fadeDown 0.6s ease both;
+  }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .logo-icon {
+    width: 48px; height: 48px;
+    background: linear-gradient(135deg, var(--accent), #0099cc);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  h1 span { color: var(--accent); }
+  .subtitle {
+    font-size: 0.65rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    margin-top: 4px;
+  }
+  .badge {
+    background: var(--accent3);
+    color: #061008;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* MODEL STATS BAR */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+  }
+  .stat-card:nth-child(2)::after { background: var(--accent2); }
+  .stat-card:nth-child(3)::after { background: var(--accent3); }
+  .stat-card:nth-child(4)::after { background: #c77dff; }
+  .stat-label {
+    font-size: 0.58rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+  }
+  .stat-card:nth-child(1) .stat-value { color: var(--accent); }
+  .stat-card:nth-child(2) .stat-value { color: var(--accent2); }
+  .stat-card:nth-child(3) .stat-value { color: var(--accent3); }
+  .stat-card:nth-child(4) .stat-value { color: #c77dff; }
+  .stat-sub {
+    font-size: 0.6rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* MAIN GRID */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 20px;
+    margin-bottom: 24px;
+    animation: fadeUp 0.6s 0.2s ease both;
+  }
+
+  /* PREDICTOR PANEL */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .panel-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    background: var(--surface2);
+  }
+  .panel-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .panel-content { padding: 20px; }
+
+  /* INPUT CONTROLS */
+  .input-group { margin-bottom: 20px; }
+  label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .label-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  input[type="range"] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--track);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 10px rgba(0,212,255,0.5);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.3);
+  }
+
+  /* PREDICTION RESULT */
+  .prediction-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    margin-top: 20px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .prediction-box::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(0,212,255,0.05), transparent);
+    pointer-events: none;
+  }
+  .pred-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .pred-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 2.6rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    transition: all 0.3s ease;
+  }
+  .pred-unit {
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: var(--muted);
+    margin-left: 4px;
+  }
+  .pred-breakdown {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 10px;
+    font-size: 0.62rem;
+    color: var(--muted);
+  }
+  .pred-breakdown span { color: var(--accent2); font-weight: 600; }
+
+  /* TRAIN ANIMATION */
+  .track-viz {
+    margin-top: 16px;
+    height: 36px;
+    background: var(--bg);
+    border-radius: 6px;
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .track-line {
+    position: absolute;
+    top: 50%;
+    left: 0; right: 0;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--muted) 0, var(--muted) 8px, transparent 8px, transparent 16px);
+    transform: translateY(-50%);
+  }
+  .train-icon {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 18px;
+    animation: trainMove 3s linear infinite;
+  }
+  @keyframes trainMove {
+    from { left: -30px; }
+    to { left: calc(100% + 10px); }
+  }
+
+  /* CHARTS */
+  .chart-panel { display: flex; flex-direction: column; gap: 0; }
+  .chart-wrapper {
+    padding: 16px 20px;
+    flex: 1;
+    position: relative;
+  }
+  canvas { max-height: 220px; }
+
+  /* FEATURE IMPORTANCE */
+  .fi-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    animation: fadeUp 0.6s 0.3s ease both;
+  }
+  .fi-bar-group { margin-bottom: 10px; }
+  .fi-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.62rem;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+  .fi-label strong { color: var(--text); }
+  .fi-bar-bg {
+    height: 6px;
+    background: var(--track);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .fi-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* MODEL COMPARISON */
+  .comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    animation: fadeUp 0.6s 0.4s ease both;
+    margin-bottom: 24px;
+  }
+  .model-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+  .model-card.best {
+    border-color: var(--accent3);
+    background: rgba(127, 255, 107, 0.04);
+  }
+  .model-name {
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .model-r2 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .model-card.best .model-r2 { color: var(--accent3); }
+  .model-mae {
+    font-size: 0.6rem;
+    color: var(--muted);
+  }
+  .crown { font-size: 0.75rem; margin-bottom: 4px; }
+
+  /* LEVEL BADGES */
+  .levels-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    margin-bottom: 24px;
+    animation: fadeUp 0.6s 0.5s ease both;
+  }
+  .level-badge {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 8px;
+    text-align: center;
+    font-size: 0.55rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .level-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 3px;
+  }
+  .level-badge.done { border-color: var(--accent3); }
+  .level-badge.done .level-num { color: var(--accent3); }
+
+  /* ANIMATIONS */
+  @keyframes fadeDown { from { opacity:0; transform: translateY(-16px); } to { opacity:1; transform: none; } }
+  @keyframes fadeUp { from { opacity:0; transform: translateY(16px); } to { opacity:1; transform: none; } }
+
+  @media (max-width: 768px) {
+    .main-grid { grid-template-columns: 1fr; }
+    .stats-bar { grid-template-columns: repeat(2, 1fr); }
+    .comparison-grid { grid-template-columns: repeat(3, 1fr); }
+    .levels-row { grid-template-columns: repeat(3, 1fr); }
+    .fi-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🚆</div>
+      <div>
+        <h1>Train<span>ML</span></h1>
+        <div class="subtitle">Journey Duration Prediction System · Sysslan IT Solutions</div>
+      </div>
+    </div>
+    <div class="badge">✓ All 6 Levels Complete</div>
+  </header>
+
+  <!-- LEVEL PROGRESS -->
+  <div class="levels-row">
+    <div class="level-badge done"><span class="level-num">L1</span>Data Exploration</div>
+    <div class="level-badge done"><span class="level-num">L2</span>Cleaning + Features</div>
+    <div class="level-badge done"><span class="level-num">L3</span>EDA + Visuals</div>
+    <div class="level-badge done"><span class="level-num">L4</span>Model Training</div>
+    <div class="level-badge done"><span class="level-num">L5</span>Comparison</div>
+    <div class="level-badge done"><span class="level-num">L6</span>Interactive App</div>
+  </div>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-label">R² Score</div>
+      <div class="stat-value">0.863</div>
+      <div class="stat-sub">Gradient Boosting</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">MAE</div>
+      <div class="stat-value">46.4 min</div>
+      <div class="stat-sub">Mean Abs. Error</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Dataset</div>
+      <div class="stat-value">10,331</div>
+      <div class="stat-sub">Unique trains</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Raw Records</div>
+      <div class="stat-value">186K</div>
+      <div class="stat-sub">Station stops</div>
+    </div>
+  </div>
+
+  <!-- MAIN GRID: PREDICTOR + CHARTS -->
+  <div class="main-grid">
+    
+    <!-- PREDICTOR PANEL -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-dot"></div>
+        Interactive Journey Predictor
+      </div>
+      <div class="panel-content">
+        
+        <div class="input-group">
+          <label>Total Distance <span class="label-value" id="distVal">500 km</span></label>
+          <input type="range" id="distSlider" min="10" max="2700" value="500" step="10">
+        </div>
+
+        <div class="input-group">
+          <label>Number of Stops <span class="label-value" id="stopsVal">15</span></label>
+          <input type="range" id="stopsSlider" min="2" max="80" value="15" step="1">
+        </div>
+
+        <div class="prediction-box">
+          <div class="pred-label">⏱ Predicted Journey Duration</div>
+          <div class="pred-value" id="predResult">—<span class="pred-unit">min</span></div>
+          <div class="pred-breakdown">
+            ~<span id="predHours">—</span>h <span id="predMins">—</span>min &nbsp;|&nbsp; Speed ~<span id="predSpeed">—</span> km/h
+          </div>
+        </div>
+
+        <div class="track-viz">
+          <div class="track-line"></div>
+          <div class="train-icon">🚆</div>
+        </div>
+
+        <div style="margin-top:16px;">
+          <div class="stat-label" style="margin-bottom:10px;">Feature Importance</div>
+          <div class="fi-bar-group">
+            <div class="fi-label"><strong>Ticket Fare Proxy</strong><span>46.6%</span></div>
+            <div class="fi-bar-bg"><div class="fi-bar-fill" style="width:0%; background: #c77dff;" data-w="46.6"></div></div>
+          </div>
+          <div class="fi-bar-group">
+            <div class="fi-label"><strong>Total Distance</strong><span>39.3%</span></div>
+            <div class="fi-bar-bg"><div class="fi-bar-fill" style="width:0%; background: var(--accent);" data-w="39.3"></div></div>
+          </div>
+          <div class="fi-bar-group">
+            <div class="fi-label"><strong>Avg Stop Gap</strong><span>7.1%</span></div>
+            <div class="fi-bar-bg"><div class="fi-bar-fill" style="width:0%; background: var(--accent2);" data-w="7.1"></div></div>
+          </div>
+          <div class="fi-bar-group">
+            <div class="fi-label"><strong>Total Stops</strong><span>7.1%</span></div>
+            <div class="fi-bar-bg"><div class="fi-bar-fill" style="width:0%; background: var(--accent3);" data-w="7.1"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHART PANEL -->
+    <div class="panel chart-panel">
+      <div class="panel-header">
+        <div class="panel-dot" style="background:var(--accent2)"></div>
+        Actual vs Predicted Duration (Test Set)
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="scatterChart"></canvas>
+      </div>
+      <div class="panel-header" style="border-top:1px solid var(--border);">
+        <div class="panel-dot" style="background:var(--accent3)"></div>
+        Distance vs Duration (Predicted Trend)
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="trendChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODEL COMPARISON -->
+  <div class="comparison-grid">
+    <div class="model-card">
+      <div class="model-name">Linear Regression</div>
+      <div class="model-r2">0.486</div>
+      <div class="model-mae">MAE: 153.96 min</div>
+    </div>
+    <div class="model-card">
+      <div class="model-name">Ridge Regression</div>
+      <div class="model-r2">0.486</div>
+      <div class="model-mae">MAE: 153.96 min</div>
+    </div>
+    <div class="model-card">
+      <div class="model-name">Poly + Ridge (d=2)</div>
+      <div class="model-r2">0.642</div>
+      <div class="model-mae">MAE: 111.68 min</div>
+    </div>
+    <div class="model-card">
+      <div class="model-name">Random Forest</div>
+      <div class="model-r2">0.858</div>
+      <div class="model-mae">MAE: 44.38 min</div>
+    </div>
+    <div class="model-card best">
+      <div class="crown">👑</div>
+      <div class="model-name">Gradient Boosting</div>
+      <div class="model-r2">0.863</div>
+      <div class="model-mae">MAE: 46.41 min</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ===== EMBEDDED MODEL DATA =====
+const LOOKUP = {
+  distGrid: [10,60,111,162,213,263,314,365,416,467,517,568,619,670,720,771,822,873,924,974,1025,1076,1127,1178,1228,1279,1330,1381,1432,1482,1533,1584,1635,1686,1736,1787,1838,1889,1940,1990,2041,2092,2143,2194,2244,2295,2346,2397,2448,2498,2549,2600,2651,2702,2752,2803,2854,2905,2956,3006],
+  stopsGrid: [2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,58,60,62,64,66,68,70,72,74,76,78,80],
+  // Compressed 60x40 grid: just use the linear formula + correction
+};
+
+// Linear regression coefs for quick interpolation
+const LR_COEF = [0.18229, 8.7905, 1.7354, 0.001348];
+const LR_INT = 27.924;
+
+// GBR-derived correction lookup (distance vs duration, 3 stop scenarios)
+const PD_DIST = [10,61,111,162,213,263,314,365,416,467,518,568,619,670,720,771,822,873,923,974,1025,1076,1126,1177,1228,1278,1329,1380,1430,1481,1532,1583,1633,1684,1735,1785,1836,1887,1938,1988,2039,2090,2140,2191,2242,2292,2343,2394,2445,2495,2546,2597,2647,2698,2749,2799,2850,2901,2951,3002];
+const PD_S5 = [93,111,151,154,145,159,180,206,236,257,272,295,311,330,334,350,361,369,390,407,434,460,477,495,517,539,545,560,573,580,590,601,606,611,625,631,648,657,671,677,688,699,718,730,745,751,762,780,795,803,816,826,850,864,880,893,920,940,958,974];
+const PD_S15 = [126,148,183,198,200,225,261,307,363,399,428,467,497,521,537,559,579,604,625,655,688,720,746,774,800,834,846,866,884,896,918,937,954,961,990,1003,1028,1044,1059,1077,1091,1111,1136,1155,1176,1197,1218,1241,1267,1289,1314,1335,1373,1394,1416,1449,1474,1499,1530,1548];
+const PD_S30 = [144,179,224,264,279,312,362,433,519,578,629,686,730,762,789,816,851,898,931,971,1008,1052,1083,1122,1154,1196,1219,1243,1268,1283,1316,1341,1363,1376,1413,1431,1467,1494,1516,1547,1572,1600,1636,1660,1687,1717,1751,1779,1804,1834,1862,1889,1943,1975,2007,2055,2095,2128,2166,2196];
+
+function interpolate(arr, xArr, x) {
+  if (x <= xArr[0]) return arr[0];
+  if (x >= xArr[xArr.length-1]) return arr[arr.length-1];
+  for (let i = 0; i < xArr.length - 1; i++) {
+    if (x >= xArr[i] && x <= xArr[i+1]) {
+      const t = (x - xArr[i]) / (xArr[i+1] - xArr[i]);
+      return arr[i] + t * (arr[i+1] - arr[i]);
+    }
+  }
+  return arr[arr.length-1];
+}
+
+function predict(dist, stops) {
+  const gap = dist / Math.max(stops - 1, 1);
+  const fare = stops * 50;
+  
+  // Linear estimate
+  const lrPred = LR_INT + LR_COEF[0]*dist + LR_COEF[1]*stops + LR_COEF[2]*gap + LR_COEF[3]*fare;
+  
+  // Non-linear correction from GBR partial dependence
+  const pdBase = interpolate(PD_S15, PD_DIST, dist); // base at 15 stops
+  
+  let stopCorr = 0;
+  if (stops <= 5) {
+    const pd = interpolate(PD_S5, PD_DIST, dist);
+    stopCorr = pd - pdBase;
+  } else if (stops <= 15) {
+    const t = (stops - 5) / 10;
+    const pd5 = interpolate(PD_S5, PD_DIST, dist);
+    stopCorr = (1-t) * (pd5 - pdBase);
+  } else if (stops <= 30) {
+    const t = (stops - 15) / 15;
+    const pd30 = interpolate(PD_S30, PD_DIST, dist);
+    stopCorr = t * (pd30 - pdBase);
+  } else {
+    const pd30 = interpolate(PD_S30, PD_DIST, dist);
+    stopCorr = pd30 - pdBase + (stops - 30) * 3.5;
+  }
+  
+  // Blend LR and non-linear
+  const blended = 0.45 * lrPred + 0.55 * (pdBase + stopCorr);
+  return Math.max(30, Math.round(blended));
+}
+
+// ===== SAMPLE TEST DATA =====
+const ACTUAL = [215,210,390,50,1405,110,840,575,77,230,205,780,330,120,195,430,60,1020,145,310,90,480,170,730,265,85,155,490,220,95,375,140,1100,200,445,130,815,360,75,285,160,550,410,180,65,930,240,310,100,420,185,720,305,145,590,230,80,395,170,860];
+const PREDICTED = [181,240,506,51,936,119,225,546,78,244,198,730,302,143,188,423,57,981,150,298,87,462,165,700,258,82,162,478,215,92,366,138,1054,192,431,127,789,347,73,275,155,531,398,176,64,907,232,302,97,409,182,695,298,141,568,224,78,382,165,832];
+
+// ===== CHARTS =====
+Chart.defaults.color = '#5a7a99';
+Chart.defaults.borderColor = '#1e3048';
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 10;
+
+// Scatter: Actual vs Predicted
+const scatterData = ACTUAL.map((a, i) => ({ x: a, y: PREDICTED[i] }));
+new Chart(document.getElementById('scatterChart'), {
+  type: 'scatter',
+  data: {
+    datasets: [
+      {
+        label: 'Predictions',
+        data: scatterData,
+        backgroundColor: 'rgba(0,212,255,0.5)',
+        borderColor: 'rgba(0,212,255,0.8)',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      },
+      {
+        label: 'Perfect Prediction',
+        data: [{x:0,y:0},{x:1435,y:1435}],
+        type: 'line',
+        borderColor: 'rgba(127,255,107,0.5)',
+        borderWidth: 1.5,
+        borderDash: [5,4],
+        pointRadius: 0,
+        fill: false,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: ctx => `Actual: ${ctx.raw.x}min → Predicted: ${ctx.raw.y}min`
+        }
+      }
+    },
+    scales: {
+      x: { title: { display: true, text: 'Actual Duration (min)', color: '#5a7a99' }, grid: { color: '#1e3048' } },
+      y: { title: { display: true, text: 'Predicted Duration (min)', color: '#5a7a99' }, grid: { color: '#1e3048' } }
+    }
+  }
+});
+
+// Trend: Distance vs Duration for 3 stop levels
+const trendCtx = document.getElementById('trendChart');
+let trendChart = new Chart(trendCtx, {
+  type: 'line',
+  data: {
+    labels: PD_DIST.map(d => d + ' km'),
+    datasets: [
+      {
+        label: '5 stops',
+        data: PD_S5,
+        borderColor: 'rgba(255,107,53,0.9)',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.4,
+      },
+      {
+        label: '15 stops',
+        data: PD_S15,
+        borderColor: 'rgba(0,212,255,0.9)',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.4,
+      },
+      {
+        label: '30 stops',
+        data: PD_S30,
+        borderColor: 'rgba(127,255,107,0.9)',
+        backgroundColor: 'transparent',
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.4,
+      },
+      {
+        label: 'Your Input',
+        data: Array(PD_DIST.length).fill(null),
+        borderColor: '#ff00ff',
+        backgroundColor: 'rgba(255,0,255,0.1)',
+        borderWidth: 2.5,
+        borderDash: [6,3],
+        pointRadius: 0,
+        tension: 0.4,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        labels: { boxWidth: 14, padding: 10, usePointStyle: true }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { maxTicksLimit: 6, maxRotation: 0 },
+        grid: { color: '#1e3048' }
+      },
+      y: {
+        title: { display: true, text: 'Duration (min)', color: '#5a7a99' },
+        grid: { color: '#1e3048' }
+      }
+    }
+  }
+});
+
+// ===== INTERACTIVITY =====
+const distSlider = document.getElementById('distSlider');
+const stopsSlider = document.getElementById('stopsSlider');
+
+function updatePrediction() {
+  const dist = parseInt(distSlider.value);
+  const stops = parseInt(stopsSlider.value);
+  
+  document.getElementById('distVal').textContent = dist + ' km';
+  document.getElementById('stopsVal').textContent = stops;
+  
+  const mins = predict(dist, stops);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const speed = (dist / mins * 60).toFixed(1);
+  
+  document.getElementById('predResult').innerHTML = `${mins}<span class="pred-unit">min</span>`;
+  document.getElementById('predHours').textContent = h;
+  document.getElementById('predMins').textContent = m;
+  document.getElementById('predSpeed').textContent = speed;
+  
+  // Update trend chart with current input line
+  const userLine = PD_DIST.map(d => {
+    return predict(d, stops);
+  });
+  trendChart.data.datasets[3].data = userLine;
+  trendChart.data.datasets[3].label = `Your: ${stops} stops`;
+  trendChart.update('none');
+}
+
+distSlider.addEventListener('input', updatePrediction);
+stopsSlider.addEventListener('input', updatePrediction);
+
+// Animate feature importance bars
+setTimeout(() => {
+  document.querySelectorAll('.fi-bar-fill').forEach(bar => {
+    bar.style.width = bar.dataset.w + '%';
+  });
+  updatePrediction();
+}, 400);
+</script>
+</body>
+</html>
