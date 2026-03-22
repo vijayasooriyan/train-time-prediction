@@ -123,6 +123,9 @@ export class PredictionService {
 
     return {
       prediction: Math.round(modelData.prediction),
+      duration_readable: modelData.duration_readable || 'N/A',
+      breakdown: modelData.breakdown || {},
+      note: modelData.note || '',
       factors: this.getDelayFactors(input),
       timestamp: new Date().toISOString(),
       input: {
