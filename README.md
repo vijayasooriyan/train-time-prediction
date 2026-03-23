@@ -272,7 +272,7 @@ Train time prediction project/
 ├── app.py                    ← Python FastAPI server ⭐
 ├── train_model.pkl           ← ML model (trained)
 ├── Dataset1.csv              ← Training data (reference)
-├── LEARNING_GUIDE.md         ← Study material for learning
+├
 │
 ├── backend/                  ← NestJS Server
 │   ├── src/
