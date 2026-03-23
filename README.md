@@ -410,5 +410,6 @@ One-click start:
 
 **Made for learning full-stack ML development** 🚂✨
 
+**Made by Vijayasooriyan Kamarajah**
 Last Updated: March 23, 2026
 
