@@ -376,30 +376,7 @@ It explains:
 - Error handling
 - And more...
 
----
 
-## 🎯 Real Example Calculations
-
-### Example 1: Short Trip
-```
-Input:  78 km, 3 stops
-Formula: (0.6 × 78) + (2.1 × 3) + 5
-Result: 46.8 + 6.3 + 5 = 58.1 minutes ≈ 58 min
-```
-
-### Example 2: Long Distance
-```
-Input:  500 km, 15 stops
-Formula: (0.6 × 500) + (2.1 × 15) + 5
-Result: 300 + 31.5 + 5 = 336.5 minutes ≈ 5h 37m
-```
-
-### Example 3: Express Train
-```
-Input:  200 km, 2 stops
-Formula: (0.6 × 200) + (2.1 × 2) + 5
-Result: 120 + 4.2 + 5 = 129.2 minutes ≈ 2h 9m
-```
 
 ---
 
@@ -414,27 +391,7 @@ Result: 120 + 4.2 + 5 = 129.2 minutes ≈ 2h 9m
 - [ ] Predictions work with valid input
 - [ ] Error messages show with invalid input
 
----
 
-## 🚀 Next Steps
-
-**Want to extend this?**
-
-1. Add database to save predictions
-2. Add authentication (login required)
-3. Train a better ML model
-4. Add more features (weather, train type, etc.)
-5. Deploy to cloud (Heroku, AWS, etc.)
-
-**Want to learn more?**
-
-1. Read LEARNING_GUIDE.md
-2. Modify frontend styling
-3. Change validation rules  
-4. Explore how React components work
-5. Learn how ML models make predictions
-
----
 
 ## 📞 Quick Reference
 
