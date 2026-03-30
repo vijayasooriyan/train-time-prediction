@@ -413,3 +413,5 @@ One-click start:
 **Made by Vijayasooriyan Kamarajah**
 Last Updated: March 23, 2026
 
+MIT License applied
+
